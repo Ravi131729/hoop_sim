@@ -1,63 +1,81 @@
-import sympy as sp
-from sympy.physics.mechanics import dynamicsymbols
+import pinocchio as pin
+import numpy as np
+from robot_model import spinjorr
+from utils import hoop_contact_point
 
-# -----------------------------------------------------------
-# Time and time-dependent variables
-# -----------------------------------------------------------
-t = sp.symbols('t')
+hoop = spinjorr(visualize=True)
 
-x, y, z = dynamicsymbols('x y z')
-psi, th, phi, a = dynamicsymbols('psi th phi a')
+fid_hoop = hoop.model.addFrame(
+    pin.Frame(
+        "hoop_frame",                 # frame name
+        hoop.jid_hoop,          # parent joint
+        0,                      # parent frame index (0 = universe, OK here)
+        pin.SE3.Identity(),     # placement in parent joint frame
+        pin.FrameType.OP_FRAME
+    )
+)
+p_local = np.array([0, 0, 0.0])
+contact_fid= hoop.model.addFrame(
+    pin.Frame(
+        "contact_frame",                 # frame name
+        hoop.jid_hoop,          # parent joint
+        0,                      # parent frame index (0 = universe, OK here)
+        pin.SE3(np.eye(3), p_local),     # placement in parent joint frame
+        pin.FrameType.OP_FRAME
+    )
+)
+# print(fid_hoop)
+# # #############################
+dt = 1e-4
+T  = 5
+N  = int(T / dt)
 
-# -----------------------------------------------------------
-# Rotation matrices
-# -----------------------------------------------------------
-c = sp.cos; s = sp.sin
+q = hoop.neutral().copy()
+q[2] = 0.1
 
-Rz = sp.Matrix([
-    [c(psi), -s(psi), 0],
-    [s(psi),  c(psi), 0],
-    [0, 0, 1]
-])
-Ry = sp.Matrix([
-    [ c(th), 0, s(th)],
-    [ 0,     1, 0],
-    [-s(th), 0, c(th)]
-])
-Rx_phi = sp.Matrix([
-    [1, 0, 0],
-    [0, c(phi), -s(phi)],
-    [0, s(phi),  c(phi)]
-])
-Rx_a = sp.Matrix([
-    [1, 0, 0],
-    [0, c(a), -s(a)],
-    [0, s(a),  c(a)]
-])
+# 30 degrees about Y
+theta = np.deg2rad(0.0)
+R0 = pin.utils.rotate('z', theta)
+R1 = pin.utils.rotate('z', np.deg2rad(0.0))
+quat = pin.Quaternion(R1@R0)   # Pinocchio quaternion
+print(quat.coeffs())
+# Set quaternion into q
+q[3:7] = quat.coeffs()
 
-R_SH = sp.simplify(Rz * Ry * Rx_phi)
-R_HP = sp.simplify(Rx_a)
+v = np.zeros(hoop.model.nv)
 
-# -----------------------------------------------------------
-# Position vectors
-# -----------------------------------------------------------
-rH_S = sp.Matrix([x, y, z])       # ^S r_H
-rx, ry, rz = sp.symbols('rx ry rz', real=True)
-rP_P = sp.Matrix([rx, ry, rz])    # ^P r_P
 
-# ^S r_P
-rP_S = rH_S + R_SH * R_HP * rP_P
+hoop.model.gravity = pin.Motion.Zero()
+hoop.data = hoop.model.createData()
 
-# -----------------------------------------------------------
-# Time derivative: d/dt (^S r_P)
-# -----------------------------------------------------------
-rP_S_dot = sp.diff(rP_S, t)
+# # ---- TIME LOOP ----
+for i in range(N):
 
-# -----------------------------------------------------------
-# Output
-# -----------------------------------------------------------
-print("\n--- {}^S r_P ---")
-sp.pretty_print(sp.simplify(rP_S))
+    pin.forwardKinematics(hoop.model, hoop.data, q, v,np.zeros(hoop.model.nv))
+    pin.updateFramePlacements(hoop.model, hoop.data)
+    pin.computeJointJacobians(hoop.model, hoop.data, q)
+    pin.computeAllTerms(hoop.model,hoop.data,q,v)
 
-print("\n--- Time derivative d/dt(^S r_P) ---")
-sp.pretty_print(sp.simplify(rP_S_dot))
+
+
+    qdd = pin.aba(hoop.model,hoop.data,q,v,tau)
+    v = v + dt * qdd
+    q = pin.integrate(hoop.model, q, dt * v)
+
+    print(q)
+    hoop.display(q)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

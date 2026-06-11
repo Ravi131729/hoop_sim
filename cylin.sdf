@@ -1,0 +1,111 @@
+<?xml version="1.0"?>
+<sdf version="1.7">
+  <model name="spinjorr">
+    <pose>0 0 0.1 0 0 0</pose>
+
+    <!-- ===================== -->
+    <!-- Main cylinder -->
+    <!-- ===================== -->
+    <link name="hoop">
+      <inertial>
+        <mass>1.0</mass>
+        <inertia>
+          <ixx>0.005833</ixx>
+          <ixy>0.0</ixy>
+          <ixz>0.0</ixz>
+          <iyy>0.005833</iyy>
+          <iyz>0.0</iyz>
+          <izz>0.005</izz>
+        </inertia>
+      </inertial>
+
+      <collision name="collision">
+        <pose>0 0 0 1.57079632679 0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.1</radius>
+            <length>0.1</length>
+          </cylinder>
+        </geometry>
+      </collision>
+
+      <visual name="visual">
+        <pose>0 0 0 1.57079632679 0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.1</radius>
+            <length>0.1</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <diffuse>1 1 1 0.3</diffuse>
+        </material>
+
+      </visual>
+    </link>
+
+    <!-- ===================== -->
+    <!-- Pendulum link -->
+    <!-- ===================== -->
+    <link name="pendulum_link">
+      <!-- Place COM below joint along -Z -->
+      <pose>0 0 -0.04 0 0 0</pose>
+
+      <inertial>
+        <mass>0.2</mass>
+        <inertia>
+          <ixx>0.001</ixx>
+          <iyy>0.001</iyy>
+          <izz>0.0002</izz>
+        </inertia>
+      </inertial>
+
+      <collision name="collision">
+        <pose>0 0 0.04 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.01</radius>
+            <length>0.08</length>
+          </cylinder>
+        </geometry>
+      </collision>
+
+      <visual name="visual">
+        <pose>0 0 0.0.04 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.01</radius>
+            <length>0.08</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <diffuse>0.2 0.2 0.8 1.0</diffuse>
+        </material>
+      </visual>
+    </link>
+
+    <!-- ===================== -->
+    <!-- Revolute joint -->
+    <!-- ===================== -->
+    <joint name="pendulum_joint" type="revolute">
+      <parent>hoop</parent>
+      <child>pendulum_link</child>
+
+      <!-- Attach on +Y side of cylinder -->
+      <pose>0 0 0.04 0 0 0</pose>
+
+      <!-- Rotation axis: X → swing in Y–Z plane -->
+      <axis>
+        <xyz>0 1 0</xyz>
+        <limit>
+          <lower>-3.1416</lower>
+          <upper>3.1416</upper>
+        </limit>
+        <dynamics>
+          <damping>0.01</damping>
+        </dynamics>
+      </axis>
+    </joint>
+
+  </model>
+</sdf>
