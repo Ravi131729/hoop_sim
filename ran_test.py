@@ -9,7 +9,8 @@ from utils import hoop_contact_point
 import matplotlib.pyplot as plt
 import meshcat.geometry as mg
 import scipy
-
+import scipy.sparse as sp
+import osqp
 
 
 def get_rtop(R,normal):
@@ -142,12 +143,12 @@ hoop.display(q)
 
 
 dt = 1e-3
-T  = 15
+T  = 10
 N  = int(T / dt)
 
 # Constants
 hoop_radius = 0.1
-alpha_baumgarte = 20.0  # Baumgarte stabilization gain
+alpha_baumgarte = 15.0  # Baumgarte stabilization gain
 
 # Data logging
 times = []
@@ -203,11 +204,6 @@ for i in range(N):
   rotor_pos_w = oMfr.translation.copy()
   hoop_pos_w = oMfh.translation.copy()
   theta = np.arctan2( hoop_center[0]-rotor_pos_w[0], hoop_center[2]-rotor_pos_w[2])
-#   print("theta", np.rad2deg(theta))
-#   print("hoop_center", hoop_center)
-#   print("hoop_pos_w", hoop_pos_w)
-#   print("rotor_pos_w", rotor_pos_w)
-#   print(oMfr.homogeneous)
 
 
 
@@ -217,14 +213,11 @@ for i in range(N):
   rc[2] = -0.1  # contact point is on ground plane (z=0)
 
   rc_dot, rc = get_rc_dot(R_wb, omega, np.array([0.0, 0.0, 1.0]))
-#   print("rc_dot", rc_dot)
-#   print("rc1", rc1)
-#   print("center_vel", Jv @ v)
-  # Contact Jacobian: J_c = J_v - skew(r_c) @ J_w
   Jc = Jv - pin.skew(rc) @ Jw
 
   # Contact velocity
   contact_vel = Jc @ v
+  # print("contact_vel", contact_vel)
 
   # Contact point height (for detecting ground contact)
 #   contact_height = p_contact[2]
@@ -232,7 +225,7 @@ for i in range(N):
   # J_c_dot * v (time derivative of contact Jacobian times velocity)
 #   Jc_dot_v = Jdotv.linear + np.cross(Jdotv.angular, rc)
 
-  Jc_dot_v = -np.cross(omega, np.cross(omega, rc)) + np.cross(omega,rc_dot)
+  Jc_dot_v = -np.cross(omega, np.cross(omega, rc)) #+ np.cross(omega,rc_dot)
 #   Jc_dot_v = np.cross(omega,rc_dot)
 
 
@@ -244,19 +237,11 @@ for i in range(N):
 
   # Control inputs (zero for passive simulation)
   tau = np.zeros(nv)
-#   print(v)
-  # tau[-2] = pendulum torque, tau[-1] = rotor torque (if you want to add control)
-#   tau[-2] =  - 0.52*0.03*9.81*np.sin(q[-2])  # simple PD control to swing up pendulum
 
-  # tau[-2] =  -np.sqrt(20)*(theta+np.pi/16) - 0.2*(v[-2]+v[4])   # simple PD control to swing up pendulum
-  tau[-2] =  - 0.002*(-v[4] + 3)   # simple PD control to swing up pendulum
-  # tau[-2] =  -0.002  # simple PD control to swing up pendulum
-  # tau[-2] =  0.2*(v[0]-0.1)  # simple PD control to swing up pendulum
-  # if t > 2.0 and t < 2.5:
-  #   tau[-1] = -0.0001
-  # else:
-  #   tau[-1] = 0.0
-  # Check if in contact with ground
+
+#   tau[-2] =  -np.sqrt(40)*(theta+np.pi/6) - 0.4*(v[-2]+v[4])   # simple PD control to swing up pendulum
+#   tau[-2] =  -0.0001 *(-np.sqrt(40)*(theta+np.pi/6) - 0.4*(v[-2]+v[4]))  # simple PD control to swing up pendulum
+  tau[-2] =  -0.0001
   if True:  # Contact detected
     # Solve for contact force using constraint dynamics:
     # M @ qddot + nle = tau + Jc^T @ lambda
@@ -278,26 +263,73 @@ for i in range(N):
     qddot_free = M_inv @ (tau - nle)
 
     b = -Jc_dot_v - alpha_baumgarte * contact_vel - Jc @ qddot_free
+    mu = 0.5
 
-    # Solve for contact force
-    lamda = np.linalg.solve(A, b)
+    P = 2 * (A.T @ A)
+    P = sp.csc_matrix((P + P.T) / 2)   # make symmetric and sparse
+    qp = -2 * (A.T @ b)
 
-    qddot = qddot_free + M_inv @ Jc.T @ lamda
+    # friction cone constraints: G lambda <= 0
+    G = np.array([
+        [ 1.0,  0.0, -mu],
+        [-1.0,  0.0, -mu],
+        [ 0.0,  1.0, -mu],
+        [ 0.0, -1.0, -mu],
+        [ 0.0,  0.0, -1.0],
+    ])
 
-#     if i % 1000 == 0:
-#       print(f"t={i*dt:.3f}s, contact_force: fx={lamda[0]:.3f}, fy={lamda[1]:.3f}, fz={lamda[2]:.3f}")
+    A_cons = sp.csc_matrix(G)
+    l = -np.inf * np.ones(G.shape[0])
+    u = np.zeros(G.shape[0])
 
-#   else:
-#     # No contact - free fall
-#     M_inv = np.linalg.inv(M)
-#     qddot = M_inv @ (tau - nle)
-#     lamda = np.zeros(3)
-#     if i % 1000 == 0:
+    prob = osqp.OSQP()
+    prob.setup(P=P, q=qp, A=A_cons, l=l, u=u, verbose=False)
 
-#       print(f"t={i*dt:.3f}s, no contact, height={contact_height:.4f}")
-    # print("a_c",Jc@qddot + Jc_dot_v)
-    # print("test_ac", Jc@qddot)
-    # print("centripetal", np.cross(omega, np.cross(omega, rc)))
+    res = prob.solve()
+    lamda_osqp = res.x
+    # f = lamda.copy()
+
+    # # # Solve for contact force
+    # lamda = np.linalg.solve(A, b)
+    # print("direct =", lamda)
+    print("osqp   =", lamda_osqp)
+    # # # mu = 0.8
+    # # n = np.array([0.0, 0.0, 1.0])
+
+    # # # assuming lamda is in world coordinates and ordered [fx, fy, fz]
+    f = lamda_osqp.copy()
+    # # print("time ", t, " raw contact force", f)
+
+    # lambda_n = np.dot(f, n)
+
+    # # no tension
+    # if lambda_n < 0:
+    #     f[:] = 0.0
+    #     print("time ", t, " contact force", f)
+    # # else:
+    # lambda_n = np.dot(f, n)
+
+    # f_t = f - lambda_n * n
+
+    # #     vt = contact_vel[:3]
+    # #     vt_t = vt - np.dot(vt, n) * n
+    # #     vt_norm = np.linalg.norm(vt_t)
+
+    #     # if vt_norm > 1e-3:
+    #     #     f_t = -mu * lambda_n * vt_t / vt_norm
+    #     #     f = lambda_n * n + f_t
+    #     #     print("sliding")
+    #     # else:
+    #     #     # sticking approximation: keep tangential force only if within cone
+    # if np.linalg.norm(f_t) > mu * lambda_n:
+    #     f_t = mu * lambda_n * f_t / np.linalg.norm(f_t)
+    #     print("time ", t, " sliding")
+
+    # f = lambda_n * n + f_t
+
+
+    qddot = qddot_free + M_inv @ Jc.T @ f
+
   roll,pitch,yaw = pin.rpy.matrixToRpy(R_wb)
   roll_list.append(roll)
   pitch_list.append(pitch)
@@ -307,12 +339,14 @@ for i in range(N):
   rotor_post = q[-1]
   # Log data
   times.append(i * dt)
-  contact_forces_x.append(lamda[0])
-  contact_forces_y.append(lamda[1])
-  contact_forces_z.append(lamda[2])
+  contact_forces_x.append(f[0])
+  contact_forces_y.append(f[1])
+  contact_forces_z.append(f[2])
 #   contact_heights.append(contact_height)
   vel = J@v
-  vel = R_wb @ v[:3]  # Transform linear velocity to body frame
+  # vel = R_wb @ v[:3]  # Transform linear velocity to body frame
+
+  # contact_vel = R_wb @ contact_vel  # Transform contact velocity to body frame
 
   contact_vel_x.append(vel[0])
   contact_vel_y.append(vel[1])
@@ -331,6 +365,7 @@ for i in range(N):
 
   # Semi-implicit Euler integration
   v = v + dt * qddot
+
   q = pin.integrate(hoop.model, q, dt * v)
 
   # Update visualization frames and display
@@ -368,8 +403,8 @@ axes[0].grid(True)
 
 # Contact velocity
 axes[1].plot(times, contact_vel_x, label='vx', color='r')
-axes[1].plot(times, hoop_velocity, label='vy', color='g')
-# axes[1].plot(times, contact_vel_z, label='vz', color='b')
+axes[1].plot(times, contact_vel_y, label='vy', color='g')
+axes[1].plot(times, contact_vel_z, label='vz', color='b')
 axes[1].set_ylabel('Velocity [m/s]')
 axes[1].set_title('Contact Point Velocity')
 axes[1].legend()

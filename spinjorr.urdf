@@ -42,7 +42,7 @@
 
   <link name="pendulum_link">
     <inertial>
-      <origin xyz="0 0 -0.03" rpy="0 0 0"/>
+      <origin xyz="0 0 -0.06" rpy="0 0 0"/>
       <mass value="0.45"/>
       <inertia ixx="0.00066" ixy="0.0" ixz="0.0"
                iyy="0.00066" iyz="0.0"
@@ -50,9 +50,9 @@
     </inertial>
 
     <visual>
-      <origin xyz="0 0 -0.04" rpy="0 0 0"/>
+      <origin xyz="0 0 -0.06" rpy="0 0 0"/>
       <geometry>
-        <cylinder radius="0.01" length="0.08"/>
+        <cylinder radius="0.01" length="0.12"/>
       </geometry>
       <material name="red">
         <color rgba="0.9 0.1 0.1 1.0"/>
@@ -60,9 +60,9 @@
     </visual>
 
     <collision>
-      <origin xyz="0 0 -0.04" rpy="0 0 0"/>
+      <origin xyz="0 0 -0.06" rpy="0 0 0"/>
       <geometry>
-        <cylinder radius="0.01" length="0.08"/>
+        <cylinder radius="0.01" length="0.12"/>
       </geometry>
     </collision>
   </link>

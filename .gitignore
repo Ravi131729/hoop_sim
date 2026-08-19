@@ -1,2 +1,3 @@
-drake_Tutorials/
-.pyc*
+__pycache__/
+*.pyc
+*.TXT

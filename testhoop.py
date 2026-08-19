@@ -162,14 +162,14 @@ with mujoco.viewer.launch_passive(model, data) as viewer:
     wbc  = WBQP(hoop.model,hoop.data,fid_hoop)
     wbc.build_qp(v_d,qd,J , Jdotv,Jc,Jc_dot_v)
     qddot, tau , lamda = wbc.solve(Jc)
-    data.ctrl[1] = tau[1]
-    data.ctrl[0] = tau[0]
+    # data.ctrl[1] = tau[1]
+    # data.ctrl[0] = tau[0]
     pend_inp.append(tau[-2])
     rotor_inp.append(tau[-1])
     lamda_x.append(lamda[0])
     lamda_y.append(lamda[1])
     lamda_z.append(lamda[2])
-    # data.ctrl[0] = 0.0#0.1*(1-v[0]) + 0.01*(-a[0])
+    data.ctrl[0] = 0.0#0.1*(1-v[0]) + 0.01*(-a[0])
     pin_vel = pin.getFrameVelocity(hoop.model, hoop.data, fid_hoop, pin.ReferenceFrame.LOCAL_WORLD_ALIGNED)
     pvel = pin_vel.linear
     vel = data.qvel[:3].copy()
