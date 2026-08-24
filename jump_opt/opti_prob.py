@@ -31,7 +31,7 @@ p_val = np.array([Io, mp, mo, Lp, g])
 
 e =0.5      # coefficient of restitution
 mu = 0.3       # coefficient of friction
-y_contact = 0.100
+y_contact = 0.1200
 
 
 u_max = 1.0
@@ -106,7 +106,7 @@ M_fun = ca.Function(
 # --------------------------------------------------
 
 x0 = np.array([0.0, 0.3, 0.0, 0.0,
-               0.5, 0.0, 5.0, 0.0])
+               1.0, 0.0,10.0, 0.0])
 
 u_val = np.array([-0.0])
 
@@ -296,8 +296,8 @@ v_com = com_velocity_fun(X_plus_contact)
 
 
 
-opti.subject_to(v_com[0] >= 0.0)  # downward velocity of COM after impact
-opti.subject_to(v_com[1] ==1.80)  # forward velocity of COM after impact
+opti.subject_to(v_com[0] == 1.0)  # downward velocity of COM after impact
+opti.subject_to(v_com[1] ==2.0)  # forward velocity of COM after impact
 # opti.subject_to(X1[7,N] ==0.00)
 
 # opti.subject_to(X1[3,N] == 2.0)
@@ -508,7 +508,7 @@ count = 0
 
 impact_times = []
 
-for k in range(N+30):
+for k in range(N):
 
     # Optimized controls at the two collocation nodes
     if k >= N:
@@ -612,17 +612,103 @@ for k in range(N+30):
 
 Xsim = np.array(Xsim)
 time_sim = np.array(time_sim)
-
-
-# --------------------------------------------------
-# Collocation node times
-# --------------------------------------------------
-
 time_opt = np.linspace(
     0,
     N * dt1_sol,
     N + 1
 )
+
+U1_sim = np.interp(time_sim, time_opt, U1_sol[0, :])
+
+np.savez(
+    "optimal_trajectory.npz",
+    X=Xsim,
+    U=U1_sim,
+    time=time_sim,
+    dt=dt_sim
+)
+
+print(Xsim.shape,U1_sim.shape)
+def angular_momentum(x, p):
+    dx = x[4]
+    dy = x[5]
+    dphi = x[6]
+    dtheta = x[7]
+
+    Io_s = p[0]
+    mp_s = p[1]
+    mo_s = p[2]
+    Lp_s = p[3]
+
+    # Position of the center of mass
+    x_com = ((mo_s + mp_s) * x[0] - mp_s * Lp_s * ca.sin(x[3])) / (mo_s + mp_s)
+    y_com = ((mo_s + mp_s) * x[1] - mp_s * Lp_s * ca.cos(x[3])) / (mo_s + mp_s)
+
+    # Velocity of the center of mass
+    dx_com = ((mo_s + mp_s) * dx - mp_s * Lp_s * ca.cos(x[3]) * dtheta) / (mo_s + mp_s)
+    dy_com = ((mo_s + mp_s) * dy + mp_s * Lp_s * ca.sin(x[3]) * dtheta) / (mo_s + mp_s)
+
+    #hoop vel relative to COM
+    v_rel_x = dx - dx_com
+    v_rel_y = dy - dy_com
+
+    #pend pos
+    pend_x = x[0] - Lp_s * ca.sin(x[3])
+    pend_y = x[1] - Lp_s * ca.cos(x[3])
+
+    #pend vel
+    pend_vel_x = dx - Lp_s * ca.cos(x[3]) * dtheta
+    pend_vel_y = dy + Lp_s * ca.sin(x[3]) * dtheta
+
+    #pend vel relative to COM
+    v_rel_pend_x = pend_vel_x - dx_com
+    v_rel_pend_y = pend_vel_y - dy_com
+
+    r_hoop_COM = ca.vertcat(x[0] - x_com, x[1] - y_com)
+    r_pend_COM = ca.vertcat(pend_x - x_com, pend_y - y_com)
+
+
+
+
+    H_hoop_com = (
+        Io_s * dphi
+        - mo_s * (
+            r_hoop_COM[0] * v_rel_y
+            - r_hoop_COM[1] * v_rel_x
+        )
+    )
+
+    H_pend_com = -(
+        mp_s * (
+            r_pend_COM[0] * v_rel_pend_y
+            - r_pend_COM[1] * v_rel_pend_x
+        )
+    )
+
+    H_com = H_hoop_com + H_pend_com
+
+    return H_com
+
+print("\nAngular momentum at each time step:")
+H_sim=[]
+for i in range(len(time_sim)):
+    H_i = angular_momentum(Xsim[i, :], p_val)
+    # print(f"t = {time_sim[i]:.4f} s, H = {H_i:.6f} kg m^2/s")
+    H_sim.append(H_i)
+# H_sim = angular_momentum(Xsim, p_val)
+
+plt.figure(figsize=(6, 4))
+plt.plot(time_sim, np.squeeze(H_sim), linewidth=2)
+plt.xlabel("Time [s]")
+plt.ylabel("Angular momentum [kg m^2/s]")
+plt.title("Angular momentum vs time")
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+# --------------------------------------------------
+# Collocation node times
+# --------------------------------------------------
+
 
 
 # --------------------------------------------------

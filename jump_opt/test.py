@@ -20,9 +20,8 @@ N = int(T/dt)
 # --------------------------------------------------
 
 mp = 0.9
-
-mo = 0.5
-R = 0.1
+mo = 0.6
+R = 0.12
 Io = mo * R**2
 Lp = 0.05
 g = 9.81
@@ -307,7 +306,7 @@ def rk4_step(x, u, p, dt):
 e =0.5# coefficient of restitution
 mu = 0.3     # coefficient of friction
 
-y_contact = 0.1
+y_contact = 0.12
 x0 = np.array([0.0, 0.25, 0.0, 0.0,
                1.0, 0.0, 10.0, 0.0])
 
